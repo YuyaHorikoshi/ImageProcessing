@@ -1,0 +1,163 @@
+/* Fundametal 2D GX functions et al. for BMP file. */
+
+#ifndef _OPGLS_FT
+#define _OPGLS_FT
+
+#include <GL/glut.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#define		  __fulsz	1260			// full screen size
+#define m_pi  3.14159265358979323846	// mathematical PI
+#define m_rad 0.01745329251994329577	// PI/180.0
+static int 	  __ww=1240,__wh=780;		// ww:width, wh:height: odd nmb
+
+void ginit(int k){
+	if(k==1)	glutInitDisplayMode(0 | 0);		// single,rgb
+	else		glutInitDisplayMode(2 | 0);		// double,rgb
+	glutInitWindowPosition(__fulsz-__ww-5,0);	// origin:0,0
+	glutInitWindowSize(__ww,__wh);				// ww:width, wh:height
+	glutCreateWindow("OpenGL");
+	glClearColor(0,0,0,1);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glColor3d(1,1,1);
+}
+
+void  ortho_window(int width, int height){
+	double ss=__wh/2,wd,ht;
+	glViewport(0,0,width,height);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	wd=(GLdouble)width;	 ht=(GLdouble)height;
+	if(width<=height) glOrtho(-ss,ss,-ss*ht/wd,ss*ht/wd,-ss,ss);
+	else	glOrtho(-ss*wd/ht, ss*wd/ht,-ss,ss,-ss,ss);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+}
+
+void gdisplay(void funct(void)){
+	glutReshapeFunc(ortho_window);
+	glutDisplayFunc(funct);
+	glClearColor(0,0,0,1);
+	glutMainLoop();
+}
+
+int randi(int r){	return(rand() % r); } 		// random integer
+
+void glcolor(int r,int g,int b){
+	glColor3ub((unsigned char)r,(unsigned char)g,(unsigned char)b);
+}
+
+void color16(int cc){
+	int c,col[16][3]={{0,0,0},{0,0,128},{204,77,51},{128,0,128},
+	{0,128,0},{0,128,128},{128,128,0},{128,128,128},{180,180,180},
+	{0,0,255},{255,0,0},{255,0,255},{0,255,0},{0,255,255},
+	{255,255,0},{255,255,255}};
+	c=cc % 16;
+	glcolor(col[c][0],col[c][1],col[c][2]);
+}
+
+void gpnt(double x,double y){		 // put_point
+	glBegin(GL_POINTS);
+		glVertex2d(x,y);
+	glEnd();
+}
+
+void gline(double x1,double y1,double x2,double y2){ // draw line
+	glBegin(GL_LINES);
+		glVertex2d(x1,y1);
+		glVertex2d(x2,y2);
+	glEnd();
+}
+
+void gtri(double x1,double y1,double x2,double y2,double x3,double y3){
+	glBegin(GL_TRIANGLES);
+		glVertex2d(x1,y1);		   // painted
+		glVertex2d(x2,y2);
+		glVertex2d(x3,y3);
+	glEnd();
+}
+
+void grectangle(double x1,double y1,double x2,double y2){
+	glBegin(GL_LINE_LOOP);
+		glVertex2d(x1,y1);
+		glVertex2d(x2,y1);
+		glVertex2d(x2,y2);
+		glVertex2d(x1,y2);
+	glEnd();
+}
+
+#define  grect(x1,y1,x2,y2)   glRectd(x1,y1,x2,y2)	   // painted
+
+void savebmpfile(char *filnam,int cm,int ht,int wd,unsigned char *datt){
+	unsigned char	h[54];	// ヘッダ
+	int	pad;		// padding
+	int	hdsz = 54, fsiz;	// ヘッダサイズ、ファイルサイズ
+	FILE	*fw;
+	int	k, x, y, c;
+
+	for(k=0; k<54; k++)	h[k] = 0;
+	h[0] = 'B';	h[1] = 'M';
+	pad = ((4-(wd % 4))*cm) % 4;
+	if(cm==1)	hdsz += 1024;
+	fsiz = (wd + pad)*ht*cm + hdsz; 
+	h[ 2] = fsiz % 256;	h[ 3] = fsiz/256;	h[ 4] = fsiz/(256*256);
+	h[10] = hdsz % 256;	h[11] = hdsz/256;	h[12] = hdsz/(256*256);
+	h[14] = 40;
+	h[18] = wd % 256;	h[19] = wd/256;	h[20] = wd/(256*256);
+	h[22] = ht % 256;	h[23] = ht/256;	h[24] = ht/(256*256);
+	h[26] = 1;	h[28] = cm*8;
+
+	fw = fopen (filnam,"wb");
+	for(k=0; k<54; k++)	fputc(h[k], fw);	// save headder
+	if (cm==1) for (k=0; k<256; k++){		// save palette
+		fputc(k,fw);fputc(k,fw);fputc(k,fw);fputc(0,fw);
+	}
+	for(y=0; y<ht; y++){				// save data
+		for(x=0; x<wd; x++){
+			for(c=0; c<cm; c++)	fputc(datt[(y*wd+x)*cm+c], fw);
+		}
+		for(k=0; k<pad; k++)	fputc(0, fw);	// save padding
+	}
+	fclose(fw);
+}
+
+void loadbmpfile(char *loadfile,int *s,int *ht,int *wd,unsigned char *dat){
+	FILE			*fr;
+	char			fname[80];
+	unsigned char	h[54];
+	int 			wide,hite,cm;
+	int				pal[1024], pad, dm;
+	int				j, k, c, m;
+	strcpy(fname, loadfile);
+	if(strstr(fname, ".bmp")==NULL)	strcat(fname, ".bmp");
+	fr = fopen(fname, "rb");
+	if(fr==NULL){
+		printf("Can't find file: \"%s\".\n", loadfile);	exit(-1);
+	}
+	for(j=0; j<54; j++)		h[j] = fgetc(fr);   // read headder
+	if(!(h[0]=='B'&& h[1]=='M')){
+		printf("\"%s\" is not BMP file.\n", loadfile);  exit(-1);
+	}
+	wide = h[18] + h[19]*256;	hite = h[22] + h[23]*256;
+	cm = h[28]/8;							// cm=1:mono, 3:color
+	if(cm==1)	for(j=0; j<1024; j++)	pal[j] = fgetc(fr);	// read pal
+	pad = ((4-(wide % 4))*cm) % 4;			// calc. padding
+	for(j=0; j<hite; j++){					// read data
+		for(k=0; k<wide; k++){
+			for(c=0; c<cm; c++)	*(dat++) = fgetc(fr);
+		}
+		for(m=0; m<pad; m++)		dm = fgetc(fr);	   // skip padding
+	}
+	fclose(fr);
+	*s = cm;	*ht = hite;	*wd = wide;
+}
+
+#define glflush()			glFlush()
+#define glclear()			glClear(0x00004000)
+#define glclears()			glClear(0x00004000|0x00000100)
+#define glutidlefunc(func)	glutIdleFunc(func)
+#define glutswapbuffers()   glutSwapBuffers()
+
+#endif	/*_OPGLS_FT*/
